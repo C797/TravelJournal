@@ -1,0 +1,133 @@
+{
+  "pages": [
+    {
+      "path": "pages/index/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "途记"
+      }
+    },
+    {
+      "path": "pages/travel-books/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我的旅行册"
+      }
+    },
+    {
+      "path": "pages/travel-books/edit",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "新建旅行册"
+      }
+    },
+    {
+      "path": "pages/travel-books/detail",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "旅行册详情"
+      }
+    },
+    {
+      "path": "pages/spots/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "标注点管理"
+      }
+    },
+    {
+      "path": "pages/journals/edit",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "写游记"
+      }
+    },
+    {
+      "path": "pages/journals/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我的游记"
+      }
+    },
+    {
+      "path": "pages/journals/detail",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "游记详情"
+      }
+    },
+    {
+      "path": "pages/ledger/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "账本"
+      }
+    },
+    {
+      "path": "pages/ledger/record",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "记一笔"
+      }
+    },
+    {
+      "path": "pages/ledger/stats",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "账本统计"
+      }
+    },
+    {
+      "path": "pages/ledger/members",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "账本成员"
+      }
+    },
+    {
+      "path": "pages/ledger/invite",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "邀请好友"
+      }
+    },
+    {
+      "path": "pages/mine/index",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "我的"
+      }
+    }
+  ],
+  "tabBar": {
+    "custom": false,
+    "color": "#999999",
+    "selectedColor": "#2E9E6B",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/travel-books/index",
+        "text": "旅行册"
+      },
+      {
+        "pagePath": "pages/ledger/index",
+        "text": "账本"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的"
+      }
+    ]
+  },
+  "globalStyle": {
+    "navigationBarTextStyle": "black",
+    "navigationBarTitleText": "途记",
+    "navigationBarBackgroundColor": "#FFFFFF",
+    "backgroundColor": "#F2F4F1"
+  }
+}

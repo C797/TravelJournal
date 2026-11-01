@@ -1,0 +1,194 @@
+// 途记 TravelJournal Prisma Schema（字段对齐开发文档 V1.4 与 UI 设计稿）
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============ 用户表 ============
+model User {
+  id         String   @id @default(uuid())
+  openid     String   @unique @map("open_id")
+  nickname   String?  @map("nick_name")
+  avatar     String?
+  signature  String?
+  userIdCode String?  @map("user_id_code")
+  phone      String?
+  role       String   @default("user") // user普通用户 / admin管理员 / reviewer审核员 / super超级管理员
+  status     String   @default("normal") // normal正常 / disabled禁用
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  travelBooks TravelBook[] @relation("TripOwner")
+  journals    Journal[]
+  bookMembers TravelBookMember[]
+  ledgers     Ledger[] @relation("LedgerOwner")
+  ledgerMembers LedgerMember[]
+  bills       Bill[]
+
+  @@map("users")
+}
+
+// ============ 旅行册表 ============
+model TravelBook {
+  id          String   @id @default(cuid())
+  coverUrl    String?  @map("cover_url")
+  name        String
+  startTime   DateTime @map("start_time")
+  endTime     DateTime @map("end_time")
+  bookIsPublic Boolean @default(false) @map("book_is_public")
+  ownerId     String   @map("owner_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner    User   @relation("TripOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members  TravelBookMember[]
+  spots    MapSpot[]
+  journals Journal[]
+  ledger   Ledger?
+
+  @@map("travel_books")
+}
+
+// ============ 旅行册成员表 ============
+model TravelBookMember {
+  id       String   @id @default(uuid())
+  bookId   String   @map("book_id")
+  userId   String   @map("user_id")
+  role     String   @default("member") // creator/admin/member
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  book TravelBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([bookId, userId])
+  @@map("travel_book_members")
+}
+
+// ============ 地图标注点表 ============
+model MapSpot {
+  id           String    @id @default(uuid())
+  bookId       String    @map("book_id")
+  locationName String    @map("location_name")
+  province     String?
+  city         String?
+  longitude    Float?
+  latitude     Float?
+  markStatus   String    @default("planned") @map("mark_status") // visited已到访 / planned规划中
+  visitDate    DateTime? @map("visit_date")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  travelBook TravelBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  journals   Journal[]
+
+  @@map("map_spots")
+}
+
+// ============ 游记表 ============
+model Journal {
+  id           String   @id @default(uuid())
+  bookId       String   @map("book_id")
+  spotId       String?  @map("spot_id")
+  userId       String   @map("user_id")
+  title        String
+  travelDate   DateTime @map("travel_date")
+  weather      String?
+  locationName String?  @map("location_name")
+  content      String   @db.Text
+  isPublic     Boolean  @default(false) @map("is_public")
+  auditStatus  String   @default("pass") @map("audit_status") // pass/pending/reject
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  travelBook TravelBook @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  spot       MapSpot?   @relation(fields: [spotId], references: [id], onDelete: SetNull)
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images     JournalImage[]
+
+  @@map("journals")
+}
+
+// ============ 游记图片表 ============
+model JournalImage {
+  id        String   @id @default(uuid())
+  journalId String   @map("journal_id")
+  url       String
+  sort      Int      @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  journal Journal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+
+  @@map("journal_images")
+}
+
+// ============ 账本表 ============
+model Ledger {
+  id        String   @id @default(uuid())
+  bookId    String   @unique @map("book_id")
+  name      String
+  ownerId   String   @map("owner_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  book    TravelBook    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  owner   User          @relation("LedgerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members LedgerMember[]
+  bills   Bill[]
+
+  @@map("ledgers")
+}
+
+// ============ 账本成员表 ============
+model LedgerMember {
+  id       String   @id @default(uuid())
+  ledgerId String   @map("ledger_id")
+  userId   String   @map("user_id")
+  role     String   @default("member") // creator/admin/member
+  joinedAt DateTime @default(now()) @map("joined_at")
+
+  ledger Ledger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([ledgerId, userId])
+  @@map("ledger_members")
+}
+
+// ============ 账单表 ============
+model Bill {
+  id          String   @id @default(uuid())
+  ledgerId    String   @map("ledger_id")
+  userId      String   @map("user_id")
+  category    String // 餐饮/交通/住宿/门票/购物/其他
+  subCategory String?  @map("sub_category")
+  billType    String   @map("bill_type") // expense支出 / income收入
+  amount      Decimal  @db.Decimal(12, 2)
+  remark      String?
+  payWay      String?  @map("pay_way")
+  billDate    DateTime @map("bill_date")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  ledger Ledger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("bills")
+}
+
+// ============ 邀请码表 ============
+model Invitation {
+  id        String    @id @default(uuid())
+  code      String    @unique
+  ledgerId  String    @map("ledger_id")
+  creatorId String    @map("creator_id")
+  expireAt  DateTime  @map("expire_at")
+  used      Boolean   @default(false)
+  usedBy    String?   @map("used_by")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  ledger Ledger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
+
+  @@map("invitations")
+}
