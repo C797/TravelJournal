@@ -9,16 +9,34 @@
       <div class="login-card">
         <h2 class="card-title">管理员登录</h2>
         <p class="card-sub">欢迎回来，请登录你的账号</p>
-        <div class="field">
+        <div class="field" :class="{ error: errorMsg }">
           <span class="field-label">账号</span>
-          <input v-model="account" class="field-input" value="admin@trail.cn" placeholder="请输入账号" />
+          <input
+            v-model="account"
+            class="field-input"
+            placeholder="请输入账号"
+            autocomplete="username"
+            @keyup.enter="focusPassword"
+          />
         </div>
-        <div class="field">
+        <div class="field" :class="{ error: errorMsg }">
           <span class="field-label">密码</span>
-          <input v-model="password" type="password" class="field-input" placeholder="请输入密码" />
+          <input
+            ref="pwdRef"
+            v-model="password"
+            type="password"
+            class="field-input"
+            placeholder="请输入密码"
+            autocomplete="current-password"
+            @keyup.enter="onLogin"
+          />
         </div>
-        <button class="login-btn" @click="onLogin">登 录</button>
+        <p v-if="errorMsg" class="error-tip">{{ errorMsg }}</p>
+        <button class="login-btn" :disabled="loading" @click="onLogin">
+          {{ loading ? '登录中…' : '登 录' }}
+        </button>
         <p class="agreement">登录即代表同意《服务协议》与《隐私政策》</p>
+        <p class="demo-tip">演示账号：admin / admin123</p>
       </div>
     </div>
   </div>
@@ -31,15 +49,40 @@ import { useAuthStore } from '@/stores/auth'
 
 const router = useRouter()
 const authStore = useAuthStore()
-const account = ref('admin@trail.cn')
-const password = ref('')
 
-function onLogin() {
-  if (!account.value || !password.value) {
+const account = ref('admin')
+const password = ref('')
+const loading = ref(false)
+const errorMsg = ref('')
+const pwdRef = ref<HTMLInputElement | null>(null)
+
+function focusPassword() {
+  pwdRef.value?.focus()
+}
+
+async function onLogin() {
+  if (loading.value) return
+  errorMsg.value = ''
+
+  if (!account.value.trim()) {
+    errorMsg.value = '请输入账号'
     return
   }
-  authStore.login('mock-admin-token', { name: '管理员', role: '超级管理员' })
-  router.push('/dashboard')
+  if (!password.value) {
+    errorMsg.value = '请输入密码'
+    return
+  }
+
+  loading.value = true
+  try {
+    await authStore.login(account.value, password.value)
+    router.push('/dashboard')
+  } catch (e: any) {
+    errorMsg.value = e?.message || '登录失败，请重试'
+    password.value = ''
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
@@ -139,10 +182,29 @@ function onLogin() {
 .login-btn:hover {
   background: #278a4e;
 }
+.login-btn:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+.field.error {
+  background: #fdf1ef;
+  box-shadow: inset 0 0 0 1px #e6b0a4;
+}
+.error-tip {
+  font-size: 12px;
+  color: #c0563f;
+  margin: -6px 0 12px 2px;
+}
 .agreement {
   text-align: center;
   font-size: 12px;
   color: #999;
   margin-top: 20px;
+}
+.demo-tip {
+  text-align: center;
+  font-size: 12px;
+  color: #b0b8b2;
+  margin-top: 6px;
 }
 </style>

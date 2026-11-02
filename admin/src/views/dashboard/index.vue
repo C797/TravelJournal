@@ -1,12 +1,29 @@
 <template>
-  <div class="dashboard">
+  <div class="dashboard" v-loading="loading">
     <!-- 数据统计卡片 -->
     <div class="stat-grid">
-      <div v-for="s in statCards" :key="s.label" class="stat-card">
+      <div v-for="s in statCards" :key="s.key" class="stat-card">
         <div class="stat-label">{{ s.label }}</div>
-        <div class="stat-value">{{ s.value }}</div>
-        <div class="stat-ratio">↑ {{ s.ratio }} <span class="stat-muted">较上月</span></div>
+        <div class="stat-value">{{ s.value }}<span class="stat-unit">{{ s.unit }}</span></div>
+        <div class="stat-ratio">
+          <template v-if="s.ratio === null">
+            <span class="stat-muted">环比 —</span>
+          </template>
+          <template v-else>
+            <span :class="s.ratio >= 0 ? 'up' : 'down'">
+              {{ s.ratio >= 0 ? '↑' : '↓' }} {{ Math.abs(s.ratio).toFixed(1) }}%
+            </span>
+            <span class="stat-muted">较上月</span>
+          </template>
+        </div>
       </div>
+    </div>
+
+    <!-- 待审核提示 -->
+    <div v-if="pendingJournals > 0" class="notice" @click="goJournals">
+      <span class="notice-dot" />
+      <span>有 <b>{{ pendingJournals }}</b> 篇游记待审核，点击去处理</span>
+      <span class="notice-arrow">→</span>
     </div>
 
     <div class="row">
@@ -19,9 +36,10 @@
             <span class="legend-item"><i class="dot dot-orange" />新增游记</span>
           </div>
         </div>
-        <svg viewBox="0 0 500 220" class="trend-svg">
-          <polyline :points="userLine" fill="none" stroke="#2e9e6b" stroke-width="2" />
-          <polyline :points="journalLine" fill="none" stroke="#c77b4a" stroke-width="2" />
+        <svg viewBox="0 0 500 220" class="trend-svg" preserveAspectRatio="none">
+          <line v-for="i in 4" :key="i" x1="0" :y1="(i - 1) * 60" x2="500" :y2="(i - 1) * 60" stroke="#f2f4f2" />
+          <polyline :points="userLine" fill="none" stroke="#2e9e6b" stroke-width="2" vector-effect="non-scaling-stroke" />
+          <polyline :points="journalLine" fill="none" stroke="#c77b4a" stroke-width="2" vector-effect="non-scaling-stroke" />
         </svg>
         <div class="trend-xaxis">
           <span v-for="d in dates" :key="d">{{ d }}</span>
@@ -32,11 +50,11 @@
       <div class="compose-card card">
         <div class="card-header">
           <span class="card-title">内容构成</span>
-          <span class="card-muted">近 30 天</span>
+          <span class="card-muted">累计占比</span>
         </div>
         <div v-for="c in composeData" :key="c.name" class="compose-item">
           <div class="compose-label">
-            <span>{{ c.name }}</span>
+            <span>{{ c.name }}<i class="compose-count">{{ c.count }}</i></span>
             <span>{{ c.value }}%</span>
           </div>
           <div class="compose-track">
@@ -50,21 +68,32 @@
     <div class="users-card card">
       <div class="card-header">
         <span class="card-title">最近注册用户</span>
-        <span class="view-all">查看全部</span>
+        <span class="view-all" @click="goUsers">查看全部</span>
       </div>
-      <el-table :data="recentUsers" style="width: 100%">
-        <el-table-column label="用户" prop="name" />
-        <el-table-column label="手机号" prop="phone" />
-        <el-table-column label="旅行册" prop="books" />
-        <el-table-column label="注册时间" prop="time" />
-        <el-table-column label="状态" prop="status">
+      <el-table :data="recentUsers" style="width: 100%" empty-text="暂无用户">
+        <el-table-column label="用户" min-width="160">
           <template #default="{ row }">
-            <span class="status-tag" :class="row.status === '正常' ? 'tag-green' : 'tag-gray'">{{ row.status }}</span>
+            <div class="user-cell">
+              <img v-if="row.avatar" :src="row.avatar" class="user-avatar" />
+              <span v-else class="user-avatar fallback">{{ row.initial }}</span>
+              <span class="user-name">{{ row.nickname }}</span>
+            </div>
           </template>
         </el-table-column>
-        <el-table-column label="操作">
-          <template #default>
-            <span class="detail-link">详情</span>
+        <el-table-column label="手机号" min-width="130">
+          <template #default="{ row }">{{ row.phone || '—' }}</template>
+        </el-table-column>
+        <el-table-column label="旅行册" width="100">
+          <template #default="{ row }">{{ row.books }} 本</template>
+        </el-table-column>
+        <el-table-column label="注册时间" min-width="160">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <span class="status-tag" :class="row.status === 'normal' ? 'tag-green' : 'tag-gray'">
+              {{ row.statusText }}
+            </span>
           </template>
         </el-table-column>
       </el-table>
@@ -73,33 +102,69 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { dashboardApi } from '@/api'
+import type { DashboardSummary } from '@/api'
 
-const statCards = [
-  { label: '用户总数', value: '12,486', ratio: '12.5%' },
-  { label: '旅行册数', value: '3,892', ratio: '8.3%' },
-  { label: '游记数', value: '28,654', ratio: '15.2%' },
-  { label: '账单数', value: '96,320', ratio: '9.8%' }
-]
+const router = useRouter()
+const loading = ref(false)
+const data = ref<DashboardSummary | null>(null)
 
-const dates = ['10.26', '10.27', '10.28', '10.29', '10.30', '10.31', '11.01']
+const statCards = computed(() =>
+  (data.value?.cards || []).map((c) => ({
+    key: c.key,
+    label: c.label,
+    value: c.value.toLocaleString('zh-CN'),
+    unit: c.unit,
+    ratio: c.ratio
+  }))
+)
 
-const userLine = ref('0,160 70,140 140,150 210,120 280,130 350,90 420,60 500,40')
-const journalLine = ref('0,190 70,180 140,185 210,160 280,170 350,150 420,140 500,130')
+const pendingJournals = computed(() => data.value?.pendingJournals || 0)
+const composeData = computed(() => data.value?.composition || [])
+const recentUsers = computed(() => data.value?.recentUsers || [])
 
-const composeData = [
-  { name: '旅行册', value: 42, color: '#2e9e6b' },
-  { name: '游记', value: 25, color: '#c77b4a' },
-  { name: '账单', value: 18, color: '#9db8a5' },
-  { name: '其他', value: 15, color: '#dce5dd' }
-]
+const trendList = computed(() => data.value?.trend || [])
+const dates = computed(() => trendList.value.map((d) => d.label))
 
-const recentUsers = [
-  { name: '旅行者小王', phone: '138****5678', books: '3 本', time: '2026-10-31 14:23', status: '正常' },
-  { name: '周同学', phone: '139****1234', books: '2 本', time: '2026-10-30 09:12', status: '正常' },
-  { name: '陈小姐', phone: '137****9999', books: '1 本', time: '2026-10-29 18:40', status: '正常' },
-  { name: '李工', phone: '136****2211', books: '4 本', time: '2026-10-28 11:05', status: '禁用' }
-]
+/** 把数值序列映射成 viewBox(500×220) 内的折线点串 */
+function toPoints(values: number[]) {
+  if (!values.length) return ''
+  const max = Math.max(...values, 1)
+  const stepX = values.length > 1 ? 500 / (values.length - 1) : 0
+  return values
+    .map((v, i) => `${Math.round(i * stepX)},${Math.round(180 - (v / max) * 150 + 20)}`)
+    .join(' ')
+}
+
+const userLine = computed(() => toPoints(trendList.value.map((d) => d.users)))
+const journalLine = computed(() => toPoints(trendList.value.map((d) => d.journals)))
+
+function formatTime(v: string) {
+  if (!v) return '—'
+  const d = new Date(v)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function goUsers() {
+  router.push('/users')
+}
+function goJournals() {
+  router.push('/journals')
+}
+
+async function load() {
+  loading.value = true
+  try {
+    data.value = await dashboardApi.summary()
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
 </script>
 
 <style scoped>
@@ -127,12 +192,52 @@ const recentUsers = [
   font-weight: 700;
   margin: 8px 0;
 }
+.stat-unit {
+  font-size: 13px;
+  font-weight: 400;
+  color: #999;
+  margin-left: 4px;
+}
 .stat-ratio {
   font-size: 13px;
+  color: #2e9e6b;
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.stat-ratio .down {
+  color: #c0563f;
+}
+.stat-ratio .up {
   color: #2e9e6b;
 }
 .stat-muted {
   color: #999;
+}
+.notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #fff8ee;
+  border: 1px solid #f2e2c9;
+  border-radius: 10px;
+  padding: 12px 18px;
+  font-size: 13px;
+  color: #8a6532;
+  cursor: pointer;
+}
+.notice b {
+  color: #c77b4a;
+}
+.notice-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #c77b4a;
+}
+.notice-arrow {
+  margin-left: auto;
+  color: #c0a882;
 }
 .row {
   display: flex;
@@ -140,9 +245,11 @@ const recentUsers = [
 }
 .trend-card {
   flex: 2;
+  min-width: 0;
 }
 .compose-card {
   flex: 1;
+  min-width: 0;
 }
 .card {
   background: #fff;
@@ -179,17 +286,23 @@ const recentUsers = [
   height: 8px;
   border-radius: 50%;
 }
-.dot-green { background: #2e9e6b; }
-.dot-orange { background: #c77b4a; }
+.dot-green {
+  background: #2e9e6b;
+}
+.dot-orange {
+  background: #c77b4a;
+}
 .trend-svg {
   width: 100%;
   height: 220px;
+  display: block;
 }
 .trend-xaxis {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
   color: #999;
+  margin-top: 8px;
 }
 .compose-item {
   margin-bottom: 16px;
@@ -200,6 +313,12 @@ const recentUsers = [
   font-size: 13px;
   margin-bottom: 6px;
 }
+.compose-count {
+  font-style: normal;
+  color: #b0b8b2;
+  margin-left: 6px;
+  font-size: 12px;
+}
 .compose-track {
   height: 8px;
   background: #f0f0f0;
@@ -208,6 +327,7 @@ const recentUsers = [
 .compose-fill {
   height: 100%;
   border-radius: 4px;
+  transition: width 0.3s;
 }
 .users-card {
   background: #fff;
@@ -224,10 +344,37 @@ const recentUsers = [
   border-radius: 10px;
   font-size: 12px;
 }
-.tag-green { background: #dcfce7; color: #16a34a; }
-.tag-gray { background: #f0f0f0; color: #999; }
-.detail-link {
+.tag-green {
+  background: #dcfce7;
+  color: #16a34a;
+}
+.tag-gray {
+  background: #f0f0f0;
+  color: #999;
+}
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.user-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+}
+.user-avatar.fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #eaf3ec;
   color: #2e9e6b;
-  cursor: pointer;
+  font-size: 12px;
+  font-weight: 600;
+}
+.user-name {
+  font-size: 13px;
+  color: #1a1a1a;
 }
 </style>

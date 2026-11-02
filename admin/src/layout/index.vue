@@ -30,11 +30,12 @@
         </router-link>
       </nav>
       <div class="admin-card">
-        <div class="admin-avatar">管</div>
+        <div class="admin-avatar">{{ auth.initial }}</div>
         <div class="admin-info">
-          <span class="admin-name">管理员</span>
-          <span class="admin-role">超级管理员</span>
+          <span class="admin-name">{{ auth.name }}</span>
+          <span class="admin-role">{{ auth.roleText }}</span>
         </div>
+        <span class="admin-exit" title="退出登录" @click="onLogout">⏻</span>
       </div>
     </aside>
 
@@ -45,10 +46,14 @@
         <div class="topbar-right">
           <div class="search-box">
             <span class="search-icon">🔍</span>
-            <input placeholder="搜索用户、旅行册、游记…" />
+            <input
+              v-model="topSearch"
+              placeholder="搜索用户昵称或手机号…"
+              @keyup.enter="goSearch"
+            />
           </div>
-          <button class="bell-btn">🔔</button>
-          <div class="topbar-avatar">管</div>
+          <button class="bell-btn" title="退出登录" @click="onLogout">⏻</button>
+          <div class="topbar-avatar">{{ auth.initial }}</div>
         </div>
       </header>
       <div class="content">
@@ -59,9 +64,16 @@
 </template>
 
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { useAuthStore } from '@/stores/auth'
 
 const route = useRoute()
+const router = useRouter()
+const auth = useAuthStore()
+
+const topSearch = ref('')
 
 const menuItems = [
   { path: '/dashboard', title: '数据看板', icon: '📊' },
@@ -75,6 +87,33 @@ const systemItems = [
   { path: '/system', title: '系统设置', icon: '⚙️' },
   { path: '/logs', title: '操作日志', icon: '🕐' }
 ]
+
+function goSearch() {
+  const kw = topSearch.value.trim()
+  if (!kw) return
+  router.push({ path: '/users', query: { keyword: kw } })
+  topSearch.value = ''
+}
+
+async function onLogout() {
+  try {
+    await ElMessageBox.confirm('确定要退出登录吗？', '退出登录', {
+      type: 'warning',
+      confirmButtonText: '退出',
+      cancelButtonText: '取消'
+    })
+  } catch {
+    return
+  }
+  await auth.logout()
+  ElMessage.success('已退出登录')
+  router.replace('/login')
+}
+
+onMounted(() => {
+  // 刷新页面后同步一次最新管理员信息（token 失效会被 401 拦截）
+  auth.fetchProfile().catch(() => {})
+})
 </script>
 
 <style scoped>
@@ -165,6 +204,16 @@ const systemItems = [
 .admin-info {
   display: flex;
   flex-direction: column;
+}
+.admin-exit {
+  margin-left: auto;
+  color: #7f938a;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px;
+}
+.admin-exit:hover {
+  color: #fff;
 }
 .admin-name {
   color: #fff;

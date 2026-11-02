@@ -1,161 +1,352 @@
 <template>
   <div class="manage-page">
-    <div class="toolbar">
-      <div class="filter-box">
-        <input placeholder="搜索昵称 / 手机号" />
+    <!-- 工具栏 -->
+    <div class="manage-toolbar">
+      <el-input
+        v-model="keyword"
+        class="manage-search"
+        placeholder="搜索昵称 / 手机号 / 用户编号"
+        clearable
+        @keyup.enter="search"
+        @clear="search"
+      >
+        <template #prefix>
+          <span class="search-icon">⌕</span>
+        </template>
+      </el-input>
+
+      <el-select v-model="status" class="manage-select" placeholder="全部状态" @change="search">
+        <el-option label="全部状态" value="all" />
+        <el-option label="正常" value="normal" />
+        <el-option label="已禁用" value="disabled" />
+      </el-select>
+
+      <el-button @click="search">查询</el-button>
+      <el-button text @click="reset">重置</el-button>
+
+      <div class="toolbar-right">
+        <span class="manage-sub">共 {{ total.toLocaleString('zh-CN') }} 位用户</span>
       </div>
-      <div class="filter-select">全部状态 ▾</div>
-      <button class="primary-btn">＋ 新增用户</button>
     </div>
 
-    <div class="table-card">
-      <el-table :data="users" style="width: 100%">
-        <el-table-column label="用户">
+    <!-- 表格 -->
+    <div class="manage-card">
+      <el-table :data="list" v-loading="loading" style="width: 100%" empty-text="暂无用户数据">
+        <el-table-column label="用户" min-width="200">
           <template #default="{ row }">
-            <div class="user-cell">
-              <div class="avatar" :style="{ background: row.color }">{{ row.initial }}</div>
-              <span>{{ row.name }}</span>
+            <div class="cell-user">
+              <img v-if="row.avatar" :src="row.avatar" class="cell-avatar" />
+              <span v-else class="cell-avatar initial">{{ row.initial }}</span>
+              <div>
+                <div class="cell-name">{{ row.nickname }}</div>
+                <div v-if="row.userIdCode" class="cell-sub">ID {{ row.userIdCode }}</div>
+              </div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="手机号" prop="phone" />
-        <el-table-column label="旅行册" prop="books" />
-        <el-table-column label="游记" prop="journals" />
-        <el-table-column label="注册时间" prop="time" />
-        <el-table-column label="状态">
+
+        <el-table-column label="手机号" min-width="130">
           <template #default="{ row }">
-            <span class="status-tag" :class="row.status === '正常' ? 'tag-green' : 'tag-gray'">{{ row.status }}</span>
+            <span :class="{ 'cell-muted': !row.phone }">{{ row.phone || '未绑定' }}</span>
           </template>
         </el-table-column>
-        <el-table-column label="操作">
-          <template #default>
-            <span class="detail-link">查看</span>
+
+        <el-table-column label="旅行册" width="100">
+          <template #default="{ row }">{{ row.books }} 本</template>
+        </el-table-column>
+
+        <el-table-column label="游记" width="100">
+          <template #default="{ row }">{{ row.journals }} 篇</template>
+        </el-table-column>
+
+        <el-table-column label="注册时间" min-width="160">
+          <template #default="{ row }">{{ formatTime(row.createdAt) }}</template>
+        </el-table-column>
+
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }">
+            <span class="status-tag" :class="row.status === 'normal' ? 'tag-green' : 'tag-gray'">
+              {{ row.statusText }}
+            </span>
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="170" fixed="right">
+          <template #default="{ row }">
+            <span class="link-btn" @click="openDetail(row)">查看</span>
+            <span
+              v-if="auth.canWrite"
+              class="link-btn"
+              :class="{ danger: row.status === 'normal' }"
+              @click="toggleStatus(row)"
+            >
+              {{ row.status === 'normal' ? '禁用' : '启用' }}
+            </span>
+            <span v-if="auth.isSuper" class="link-btn danger" @click="remove(row)">删除</span>
           </template>
         </el-table-column>
       </el-table>
-      <div class="table-footer">
-        <span class="total">共 12,486 位用户</span>
-        <div class="pagination">
-          <span class="page">‹</span>
-          <span class="page active">1</span>
-          <span class="page">2</span>
-          <span class="page">3</span>
-          <span class="page">…</span>
-          <span class="page">417</span>
-          <span class="page">›</span>
-        </div>
+
+      <div class="manage-footer">
+        <span class="manage-total">第 {{ page }} / {{ totalPages }} 页</span>
+        <el-pagination
+          v-model:current-page="page"
+          :page-size="pageSize"
+          :total="total"
+          layout="prev, pager, next, jumper"
+          background
+          @current-change="load"
+        />
       </div>
     </div>
+
+    <!-- 用户详情 -->
+    <el-drawer v-model="detailVisible" title="用户详情" size="420px">
+      <div v-if="detail" class="detail">
+        <div class="detail-head">
+          <img v-if="detail.avatar" :src="detail.avatar" class="detail-avatar" />
+          <span v-else class="detail-avatar initial">{{ (detail.nickname || '游').slice(0, 1) }}</span>
+          <div>
+            <div class="detail-name">{{ detail.nickname }}</div>
+            <div class="cell-sub">{{ detail.userIdCode || '—' }}</div>
+          </div>
+        </div>
+
+        <el-descriptions :column="1" border size="small" class="detail-desc">
+          <el-descriptions-item label="手机号">{{ detail.phone || '未绑定' }}</el-descriptions-item>
+          <el-descriptions-item label="状态">{{ detail.statusText }}</el-descriptions-item>
+          <el-descriptions-item label="注册时间">{{ formatTime(detail.createdAt) }}</el-descriptions-item>
+        </el-descriptions>
+
+        <div class="detail-stats">
+          <div class="ds-item">
+            <div class="ds-num">{{ detail.stats?.travelBooks ?? 0 }}</div>
+            <div class="ds-label">旅行册</div>
+          </div>
+          <div class="ds-item">
+            <div class="ds-num">{{ detail.stats?.journals ?? 0 }}</div>
+            <div class="ds-label">游记</div>
+          </div>
+          <div class="ds-item">
+            <div class="ds-num">{{ detail.stats?.bills ?? 0 }}</div>
+            <div class="ds-label">账单</div>
+          </div>
+          <div class="ds-item">
+            <div class="ds-num">¥{{ (detail.stats?.totalExpense || 0).toLocaleString('zh-CN') }}</div>
+            <div class="ds-label">累计支出</div>
+          </div>
+        </div>
+
+        <div class="detail-section">最近游记</div>
+        <div v-if="detail.recentJournals?.length" class="detail-journals">
+          <div v-for="j in detail.recentJournals" :key="j.id" class="dj-item">
+            <div class="dj-title">{{ j.title }}</div>
+            <div class="cell-sub">{{ formatDate(j.travelDate || j.createdAt) }}</div>
+          </div>
+        </div>
+        <div v-else class="manage-empty">暂无游记</div>
+      </div>
+    </el-drawer>
   </div>
 </template>
 
 <script setup lang="ts">
-const users = [
-  { name: '旅行者小王', phone: '138****5678', books: '3', journals: '17', time: '2026-10-31 14:23', status: '正常', initial: '王', color: '#d6eadd' },
-  { name: '周同学', phone: '139****1234', books: '2', journals: '9', time: '2026-10-30 09:12', status: '正常', initial: '周', color: '#f5e3d0' },
-  { name: '陈小姐', phone: '137****9999', books: '1', journals: '4', time: '2026-10-29 18:40', status: '正常', initial: '陈', color: '#d6def0' },
-  { name: '李工', phone: '136****2211', books: '4', journals: '26', time: '2026-10-28 11:05', status: '禁用', initial: '李', color: '#e0e0e0' }
-]
+import { onMounted, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { userApi } from '@/api'
+import type { UserRow } from '@/api'
+import { useAuthStore } from '@/stores/auth'
+
+const auth = useAuthStore()
+const route = useRoute()
+
+const list = ref<UserRow[]>([])
+const total = ref(0)
+const page = ref(1)
+const pageSize = ref(20)
+const totalPages = ref(1)
+const keyword = ref((route.query.keyword as string) || '')
+const status = ref('all')
+const loading = ref(false)
+
+const detailVisible = ref(false)
+const detail = ref<any>(null)
+
+function formatTime(v?: string | null) {
+  if (!v) return '—'
+  const d = new Date(v)
+  const p = (n: number) => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+function formatDate(v?: string | null) {
+  if (!v) return '—'
+  return String(v).slice(0, 10)
+}
+
+async function load() {
+  loading.value = true
+  try {
+    const res = await userApi.list({
+      page: page.value,
+      pageSize: pageSize.value,
+      keyword: keyword.value.trim() || undefined,
+      status: status.value
+    })
+    list.value = res.list
+    total.value = res.total
+    totalPages.value = res.totalPages
+  } catch {
+    list.value = []
+  } finally {
+    loading.value = false
+  }
+}
+
+function search() {
+  page.value = 1
+  load()
+}
+
+function reset() {
+  keyword.value = ''
+  status.value = 'all'
+  page.value = 1
+  load()
+}
+
+async function openDetail(row: UserRow) {
+  detailVisible.value = true
+  detail.value = null
+  try {
+    detail.value = await userApi.detail(row.id)
+  } catch {
+    detailVisible.value = false
+  }
+}
+
+async function toggleStatus(row: UserRow) {
+  const next = row.status === 'normal' ? 'disabled' : 'normal'
+  const label = next === 'disabled' ? '禁用' : '启用'
+  try {
+    await ElMessageBox.confirm(
+      `确定要${label}用户「${row.nickname}」吗？${next === 'disabled' ? '禁用后该用户将无法登录小程序。' : ''}`,
+      `${label}用户`,
+      { type: 'warning', confirmButtonText: '确定', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  await userApi.updateStatus(row.id, next)
+  ElMessage.success(`已${label}`)
+  load()
+}
+
+async function remove(row: UserRow) {
+  try {
+    await ElMessageBox.confirm(
+      `删除用户「${row.nickname}」会同时删除其旅行册、游记与账单，且不可恢复。确定继续吗？`,
+      '删除用户',
+      { type: 'error', confirmButtonText: '确认删除', cancelButtonText: '取消' }
+    )
+  } catch {
+    return
+  }
+  await userApi.remove(row.id)
+  ElMessage.success('已删除')
+  if (list.value.length === 1 && page.value > 1) page.value -= 1
+  load()
+}
+
+onMounted(load)
+
+// 顶部搜索框跳转过来时，同步关键词并重新查询
+watch(
+  () => route.query.keyword,
+  (v) => {
+    if (typeof v === 'string' && v !== keyword.value) {
+      keyword.value = v
+      search()
+    }
+  }
+)
 </script>
 
 <style scoped>
-.manage-page {
+.search-icon {
+  font-size: 15px;
+  color: #b0b8b2;
+}
+.detail {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
-.toolbar {
+.detail-head {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 14px;
 }
-.filter-box {
-  display: flex;
-  align-items: center;
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px 14px;
-  width: 260px;
-}
-.filter-box input {
-  border: none;
-  outline: none;
-  font-size: 13px;
-  width: 100%;
-}
-.filter-select {
-  background: #fff;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 8px 16px;
-  font-size: 13px;
-  color: #555;
-  cursor: pointer;
-}
-.primary-btn {
-  margin-left: auto;
-  padding: 8px 20px;
-  border: none;
-  border-radius: 8px;
-  background: #16a34a;
-  color: #fff;
-  font-size: 13px;
-  cursor: pointer;
-}
-.table-card {
-  background: #fff;
-  border-radius: 12px;
-  padding: 20px;
-}
-.user-cell {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 600;
-}
-.avatar {
-  width: 32px;
-  height: 32px;
+.detail-avatar {
+  width: 52px;
+  height: 52px;
   border-radius: 50%;
+  object-fit: cover;
+  background: #eaf3ec;
+}
+.detail-avatar.initial {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
+  font-size: 20px;
   font-weight: 700;
+  color: #2e9e6b;
 }
-.status-tag {
-  padding: 2px 10px;
+.detail-name {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1a1a1a;
+}
+.detail-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+.ds-item {
+  background: #f7f9f7;
   border-radius: 10px;
+  padding: 12px 14px;
+}
+.ds-num {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a2e2a;
+}
+.ds-label {
   font-size: 12px;
+  color: #9aa39d;
+  margin-top: 2px;
 }
-.tag-green { background: #e7f6ee; color: #16a34a; }
-.tag-gray { background: #f0f0f0; color: #999; }
-.detail-link { color: #16a34a; cursor: pointer; }
-.table-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 16px;
-}
-.total { font-size: 13px; color: #999; }
-.pagination {
-  display: flex;
-  gap: 6px;
-}
-.page {
-  width: 28px;
-  height: 28px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.detail-section {
   font-size: 13px;
-  cursor: pointer;
-  color: #555;
+  font-weight: 700;
+  color: #1a1a1a;
+  margin-top: 4px;
 }
-.page.active {
-  background: #16a34a;
-  color: #fff;
+.detail-journals {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.dj-item {
+  background: #f7f9f7;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.dj-title {
+  font-size: 13px;
+  color: #1a2e2a;
+  font-weight: 600;
 }
 </style>
