@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
+import { AdminJwtStrategy } from './strategies/admin-jwt.strategy';
 import { UsersModule } from '../users/users.module';
 
 @Module({
@@ -12,10 +13,10 @@ import { UsersModule } from '../users/users.module';
     PassportModule,
     JwtModule.register({
       secret: process.env.JWT_SECRET || 'traveljournal-dev-secret',
-      signOptions: { expiresIn: '2h' },
+      signOptions: { expiresIn: process.env.JWT_EXPIRES_IN || '2h' },
     }),
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [AuthService, JwtStrategy, AdminJwtStrategy],
   controllers: [AuthController],
   exports: [AuthService],
 })

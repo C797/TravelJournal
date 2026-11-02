@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Param, Query, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { LedgersService } from './ledgers.service';
 
@@ -6,6 +6,24 @@ import { LedgersService } from './ledgers.service';
 @UseGuards(AuthGuard('jwt'))
 export class LedgersController {
   constructor(private readonly service: LedgersService) {}
+
+  /**
+   * 新建/更新账本。
+   * 账本与旅行册是 1:1 关系：同一旅行册再次创建视为改名 + 同步成员。
+   */
+  @Post('ledgers')
+  create(
+    @Req() req: any,
+    @Body()
+    body: {
+      bookId: string;
+      name: string;
+      isPublic?: boolean;
+      memberIds?: string[];
+    },
+  ) {
+    return this.service.createOrUpdate(req.user.id, body);
+  }
 
   @Get('travel-books/:id/ledger')
   getByBook(@Req() req: any, @Param('id') bookId: string) {

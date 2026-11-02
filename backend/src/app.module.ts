@@ -10,6 +10,8 @@ import { LedgersModule } from './modules/ledgers/ledgers.module';
 import { BillsModule } from './modules/bills/bills.module';
 import { InvitationsModule } from './modules/invitations/invitations.module';
 import { HealthModule } from './modules/health/health.module';
+import { UploadModule } from './modules/upload/upload.module';
+import { AdminModule } from './modules/admin/admin.module';
 
 @Module({
   imports: [
@@ -23,6 +25,8 @@ import { HealthModule } from './modules/health/health.module';
     LedgersModule,
     BillsModule,
     InvitationsModule,
+    UploadModule,
+    AdminModule,
     HealthModule,
   ],
 })

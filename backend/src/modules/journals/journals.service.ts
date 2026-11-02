@@ -42,7 +42,7 @@ export class JournalsService {
   async detail(userId: string, id: string) {
     const journal = await this.prisma.journal.findUnique({
       where: { id },
-      include: { images: { orderBy: { sort: 'asc' } }, book: true },
+      include: { images: { orderBy: { sort: 'asc' } }, travelBook: true },
     });
     if (!journal) throw new NotFoundException('游记不存在');
     if (!(await this.canView(journal, userId))) throw new ForbiddenException('无权限查看');

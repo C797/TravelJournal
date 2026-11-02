@@ -4,7 +4,7 @@ generator client {
 }
 
 datasource db {
-  provider = "mysql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -41,6 +41,7 @@ model TravelBook {
   endTime     DateTime @map("end_time")
   bookIsPublic Boolean @default(false) @map("book_is_public")
   ownerId     String   @map("owner_id")
+  status      String   @default("normal") // normal正常 / disabled已下架
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -97,7 +98,7 @@ model Journal {
   travelDate   DateTime @map("travel_date")
   weather      String?
   locationName String?  @map("location_name")
-  content      String   @db.Text
+  content      String
   isPublic     Boolean  @default(false) @map("is_public")
   auditStatus  String   @default("pass") @map("audit_status") // pass/pending/reject
   createdAt    DateTime @default(now()) @map("created_at")
@@ -130,13 +131,16 @@ model Ledger {
   bookId    String   @unique @map("book_id")
   name      String
   ownerId   String   @map("owner_id")
+  isPublic  Boolean  @default(false) @map("is_public")
+  status    String   @default("normal") // normal正常 / disabled已停用
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  book    TravelBook    @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  owner   User          @relation("LedgerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
-  members LedgerMember[]
-  bills   Bill[]
+  book        TravelBook    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  owner       User          @relation("LedgerOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  members     LedgerMember[]
+  bills       Bill[]
+  invitations Invitation[]
 
   @@map("ledgers")
 }
@@ -164,7 +168,7 @@ model Bill {
   category    String // 餐饮/交通/住宿/门票/购物/其他
   subCategory String?  @map("sub_category")
   billType    String   @map("bill_type") // expense支出 / income收入
-  amount      Decimal  @db.Decimal(12, 2)
+  amount      Decimal
   remark      String?
   payWay      String?  @map("pay_way")
   billDate    DateTime @map("bill_date")
@@ -191,4 +195,49 @@ model Invitation {
   ledger Ledger @relation(fields: [ledgerId], references: [id], onDelete: Cascade)
 
   @@map("invitations")
+}
+
+// ============ 后台管理员表 ============
+model AdminUser {
+  id           String   @id @default(uuid())
+  account      String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         String   @default("admin") // super超级管理员 / admin管理员 / reviewer审核员
+  status       String   @default("normal") // normal正常 / disabled禁用
+  lastLoginAt  DateTime? @map("last_login_at")
+  lastLoginIp  String?  @map("last_login_ip")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_users")
+}
+
+// ============ 系统配置表（键值对）============
+model SystemConfig {
+  id        String   @id @default(uuid())
+  key       String   @unique
+  value     String
+  remark    String?
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_configs")
+}
+
+// ============ 后台操作日志表 ============
+model OperationLog {
+  id         String   @id @default(uuid())
+  adminId    String?  @map("admin_id")
+  adminName  String?  @map("admin_name")
+  module     String // user/travelBook/journal/ledger/system/auth
+  action     String // create/update/delete/audit/disable/enable/login/logout
+  targetId   String?  @map("target_id")
+  content    String?
+  ip         String?
+  userAgent  String?  @map("user_agent")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([module])
+  @@index([createdAt])
+  @@map("operation_logs")
 }
