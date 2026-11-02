@@ -89,6 +89,8 @@ export interface Ledger {
   bookId: string
   name: string
   ownerId: string
+  /** 是否对所有人公开；false 时仅账本成员可见 */
+  isPublic?: boolean
   createdAt?: string
   // 统计
   monthExpense?: number
@@ -142,8 +144,10 @@ export interface StatsItem {
 
 export interface LedgerStats {
   totalExpense: number
-  prevPeriodRatio?: number
-  categoryRatio: { name: string; value: number }[]
+  /** 环比上一周期百分比，无上期数据时为 null */
+  prevPeriodRatio?: number | null
+  prevExpense?: number
+  categoryRatio: { name: string; value: number; amount?: number }[]
   dailyTrend: { date: string; value: number }[]
   avgExpense: number
   memberCount: number

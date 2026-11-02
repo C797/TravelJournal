@@ -71,6 +71,13 @@
       }
     },
     {
+      "path": "pages/ledger/create",
+      "style": {
+        "navigationStyle": "custom",
+        "navigationBarTitleText": "新建账本"
+      }
+    },
+    {
       "path": "pages/ledger/stats",
       "style": {
         "navigationStyle": "custom",
@@ -99,31 +106,6 @@
       }
     }
   ],
-  "tabBar": {
-    "custom": false,
-    "color": "#999999",
-    "selectedColor": "#2E9E6B",
-    "backgroundColor": "#FFFFFF",
-    "borderStyle": "white",
-    "list": [
-      {
-        "pagePath": "pages/index/index",
-        "text": "首页"
-      },
-      {
-        "pagePath": "pages/travel-books/index",
-        "text": "旅行册"
-      },
-      {
-        "pagePath": "pages/ledger/index",
-        "text": "账本"
-      },
-      {
-        "pagePath": "pages/mine/index",
-        "text": "我的"
-      }
-    ]
-  },
   "globalStyle": {
     "navigationBarTextStyle": "black",
     "navigationBarTitleText": "途记",

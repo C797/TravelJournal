@@ -1,19 +1,83 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
-import { mockJournals } from '@/mock'
+import { journalApi } from '@/api/book'
+import Icon from '@/components/Icon.vue'
+import { overlayNavStyle } from '@/utils/safe-area'
+import { formatDate } from '@/utils'
+import type { Journal } from '@/types'
 
-const journal = ref(mockJournals[0])
+const journalId = ref('')
+const journal = ref<Journal | null>(null)
+const loading = ref(true)
+
+// 无图时的占位（设计稿导出的实拍图）
+const HERO_PLACEHOLDER = '/static/photos/journal-hero.jpg'
+const GALLERY_PLACEHOLDER = [
+  '/static/photos/journal-1.jpg',
+  '/static/photos/journal-2.jpg',
+  '/static/photos/journal-3.jpg'
+]
+
+/** 头图：优先游记首图 */
+const heroUrl = computed(() => {
+  const imgs = journal.value?.images || []
+  return imgs.length ? imgs[0].url : HERO_PLACEHOLDER
+})
+
+/** 影像：优先真实图片，无图时用占位 */
+const gallery = computed(() => {
+  const imgs = journal.value?.images || []
+  if (imgs.length > 1) return imgs.slice(1).map((i) => i.url)
+  if (imgs.length === 1) return []
+  return GALLERY_PLACEHOLDER
+})
+
+/** 正文按空行拆段，保留原始分段 */
+const paragraphs = computed(() => {
+  const text = journal.value?.content || ''
+  return text
+    .split(/\n+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+})
+
+const dateTag = computed(() => {
+  const d = journal.value?.travelDate
+  if (!d) return 'TRAVEL NOTE'
+  const t = new Date(d)
+  return `TRAVEL NOTE / ${String(t.getMonth() + 1).padStart(2, '0')}.${String(t.getDate()).padStart(2, '0')}`
+})
+
+async function loadData() {
+  if (!journalId.value) {
+    loading.value = false
+    return
+  }
+  loading.value = true
+  try {
+    journal.value = await journalApi.detail(journalId.value)
+  } catch {
+    journal.value = null
+  } finally {
+    loading.value = false
+  }
+}
 
 onLoad((query: any) => {
-  if (query?.id) {
-    const found = mockJournals.find((j) => j.id === query.id)
-    if (found) journal.value = found
-  }
+  journalId.value = query?.id || ''
+  loadData()
 })
 
 function goBack() {
   uni.navigateBack()
+}
+
+/** 图片预览 */
+function previewImage(current: string) {
+  const urls = (journal.value?.images || []).map((i) => i.url)
+  const list = urls.length ? urls : [current]
+  uni.previewImage({ current, urls: list })
 }
 </script>
 
@@ -22,43 +86,46 @@ function goBack() {
     <scroll-view scroll-y class="detail-scroll">
       <!-- 头图 -->
       <view class="hero">
-        <text class="hero-emoji">🏞️</text>
-        <view class="hero-nav">
-          <view class="hero-btn" @click="goBack"><text>‹</text></view>
-          <view class="hero-btn"><text>···</text></view>
+        <image class="hero-img" :src="heroUrl" mode="aspectFill" />
+        <view class="hero-nav" :style="overlayNavStyle">
+          <view class="hero-btn" @click="goBack">
+            <Icon name="chevron-left" color="#FFFFFF" :weight="2" size="36rpx" />
+          </view>
+          <view class="hero-btn">
+            <Icon name="dots" color="#FFFFFF" :weight="2.6" size="34rpx" />
+          </view>
         </view>
       </view>
 
       <!-- 内容卡片 -->
       <view class="content-card">
-        <text class="cc-tag">TRAVEL NOTE / 10.05</text>
-        <text class="cc-title">蓝色星球最后的净土</text>
-        <view class="cc-loc">
-          <text class="loc-icon">📍</text>
-          <text>四川 · 稻城亚丁 · 牛奶海</text>
+        <text class="cc-tag">{{ dateTag }}</text>
+        <text class="cc-title">{{ journal ? journal.title : '游记不存在' }}</text>
+        <view v-if="journal && journal.locationName" class="cc-loc">
+          <Icon name="pin" color="#6B756F" :weight="1.6" size="30rpx" />
+          <text>{{ journal.locationName }}</text>
         </view>
-        <view class="cc-weather">
-          <text class="weather-icon">☀️</text>
-          <text>多云转晴　12°C</text>
+        <view v-if="journal && journal.weather" class="cc-weather">
+          <Icon name="sun" color="#D9822B" :weight="1.6" size="30rpx" />
+          <text>{{ journal.weather }}</text>
         </view>
 
         <view class="cc-divider" />
 
-        <text class="cc-body">
-          早上六点从香格里拉镇出发，沿着盘山公路一路向上。翻越 4600 米的俄初山垭口时，晨雾正慢慢散开，露出远处雪山的轮廓。
-        </text>
-        <text class="cc-body">
-          牛奶海像一颗蓝宝石嵌在央迈勇雪山之间，湖水清得能看见湖底的石子。海拔 4700 米的徒步，每一步都在与自己对话。
-        </text>
+        <text v-for="(p, i) in paragraphs" :key="i" class="cc-body">{{ p }}</text>
 
-        <view class="gallery-header">
+        <view v-if="gallery.length" class="gallery-header">
           <text class="gh-title">旅途影像</text>
-          <text class="gh-count">共 3 张</text>
+          <text class="gh-count">共 {{ gallery.length }} 张</text>
         </view>
-        <view class="gallery">
-          <view class="gallery-item"><text>🏔️</text></view>
-          <view class="gallery-item"><text>🌫️</text></view>
-          <view class="gallery-item"><text>🏘️</text></view>
+        <view v-if="gallery.length" class="gallery">
+          <view v-for="(g, i) in gallery" :key="i" class="gallery-item" @click="previewImage(g)">
+            <image class="gallery-img" :src="g" mode="aspectFill" />
+          </view>
+        </view>
+
+        <view v-if="!loading && !journal" class="detail-empty">
+          <text>这篇游记不存在或已被删除</text>
         </view>
       </view>
     </scroll-view>
@@ -69,17 +136,26 @@ function goBack() {
 .detail-page { min-height: 100vh; background: #fff; }
 .detail-scroll { height: 100vh; }
 
+.detail-empty {
+  padding: 80rpx 0;
+  display: flex;
+  justify-content: center;
+  font-size: 26rpx;
+  color: #a9b5ac;
+}
+
 .hero {
   position: relative;
-  height: 620rpx;
-  background: linear-gradient(170deg, #7aa8b8, #3a6a78);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  .hero-emoji { font-size: 160rpx; }
+  height: 716rpx;
+  background: #cdd9d2;
+  .hero-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
   .hero-nav {
     position: absolute;
-    top: 60rpx;
+    top: 0;
     left: 0;
     right: 0;
     padding: 0 32rpx;
@@ -89,26 +165,31 @@ function goBack() {
       width: 72rpx;
       height: 72rpx;
       border-radius: 50%;
-      background: rgba(255,255,255,0.4);
-      color: #333;
+      background: rgba(255, 255, 255, 0.26);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 40rpx;
     }
   }
 }
 
 .content-card {
-  margin-top: -48rpx;
+  margin-top: -40rpx;
   position: relative;
-  background: #fff;
-  border-radius: 48rpx 48rpx 0 0;
-  padding: 48rpx 40rpx;
+  background: #f5f6f5;
+  border-radius: 40rpx 40rpx 0 0;
+  padding: 44rpx 56rpx 60rpx;
   display: flex;
   flex-direction: column;
   .cc-tag { font-size: 22rpx; color: #b0b0b0; letter-spacing: 3rpx; }
-  .cc-title { margin-top: 16rpx; font-size: 44rpx; font-weight: 700; color: #1f3d33; }
+  .cc-title {
+    margin-top: 16rpx;
+    font-size: 52rpx;
+    font-weight: 700;
+    color: #1a2e2a;
+    font-family: 'Noto Serif SC', 'Songti SC', serif;
+    letter-spacing: 1rpx;
+  }
   .cc-loc, .cc-weather {
     margin-top: 16rpx;
     display: flex;
@@ -136,17 +217,15 @@ function goBack() {
   }
   .gallery {
     display: flex;
-    gap: 16rpx;
+    gap: 14rpx;
     .gallery-item {
       flex: 1;
       height: 200rpx;
       border-radius: 16rpx;
+      overflow: hidden;
       background: #e8f0ea;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 72rpx;
     }
+    .gallery-img { width: 100%; height: 100%; display: block; }
   }
 }
 </style>

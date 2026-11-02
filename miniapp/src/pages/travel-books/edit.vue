@@ -2,19 +2,27 @@
 import { ref, computed } from 'vue'
 import { onLoad } from '@dcloudio/uni-app'
 import { calcDays } from '@/utils'
+import Icon from '@/components/Icon.vue'
+import { statusBarStyle, menuRightStyle } from '@/utils/safe-area'
 
 const name = ref('川西之旅')
 const startTime = ref('2025-06-01')
 const endTime = ref('2025-06-15')
-const isPublic = ref(false)
+const isPublic = ref(true)
 const invited = ref(['林', '陈', '王'])
 const selectedCover = ref(0)
 
 const tripDays = computed(() => calcDays(startTime.value, endTime.value))
 const nameLen = computed(() => name.value.length)
 
-// 5 张默认封面
-const covers = ['🏔️', '🌃', '⛰️', '🏜️', '🛶']
+// 5 张默认封面（取自设计稿导出的实拍图）
+const covers = [
+  '/static/photos/cover-snow.jpg',
+  '/static/photos/cover-city.jpg',
+  '/static/photos/cover-cloud.jpg',
+  '/static/photos/cover-desert.jpg',
+  '/static/photos/cover-water.jpg'
+]
 
 function onStartChange(e: any) {
   startTime.value = e.detail.value
@@ -47,10 +55,12 @@ function create() {
 
 <template>
   <view class="edit-page">
+    <!-- 状态栏占位（高度按机型自适应） -->
+    <view class="status-bar" :style="statusBarStyle" />
     <view class="tj-nav">
       <text class="tj-nav-back" @click="goBack">‹</text>
       <text class="tj-nav-title">新建旅行册</text>
-      <text class="tj-nav-action" @click="saveDraft">存草稿</text>
+      <text class="tj-nav-action" :style="menuRightStyle" @click="saveDraft">存草稿</text>
     </view>
 
     <scroll-view scroll-y class="edit-scroll">
@@ -61,12 +71,14 @@ function create() {
           <text class="label-tip">5 张默认封面，也可上传</text>
         </view>
         <view class="cover-preview">
-          <text class="cover-preview-emoji">{{ covers[selectedCover] }}</text>
+          <image class="cp-img" :src="covers[selectedCover]" mode="aspectFill" />
           <view class="cover-preview-info">
             <text class="cp-name">{{ name }}</text>
             <text class="cp-meta">{{ startTime }} — {{ endTime }} · 12 篇游记</text>
           </view>
-          <view class="cp-check"><text>✓</text></view>
+          <view class="cp-check">
+            <Icon name="check" color="#2E9E6B" :weight="2.4" size="28rpx" />
+          </view>
         </view>
         <view class="cover-list">
           <view
@@ -76,10 +88,10 @@ function create() {
             :class="{ selected: selectedCover === i }"
             @click="selectedCover = i"
           >
-            <text>{{ c }}</text>
+            <image class="ct-img" :src="c" mode="aspectFill" />
           </view>
           <view class="cover-upload">
-            <text class="u-plus">＋</text>
+            <Icon name="plus" color="#6B756F" :weight="1.9" size="30rpx" />
             <text class="u-label">上传</text>
           </view>
         </view>
@@ -125,7 +137,7 @@ function create() {
           <text class="setting-title">对所有人公开</text>
           <text class="setting-desc">可分享到朋友圈，任何人可查看</text>
         </view>
-        <switch :checked="isPublic" color="#2E9E6B" @change="isPublic = $event.detail.value" />
+        <switch :checked="isPublic" color="#2E9E6B" @change="isPublic = ($event as any).detail.value" />
       </view>
 
       <!-- 邀请同行好友 -->
@@ -182,12 +194,13 @@ function create() {
   position: relative;
   height: 360rpx;
   border-radius: 24rpx;
-  background: linear-gradient(135deg, #5f8f74, #3e6a54);
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  background: #cdd9d2;
   overflow: hidden;
-  .cover-preview-emoji { font-size: 120rpx; }
+  .cp-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
   .cover-preview-info {
     position: absolute;
     left: 0;
@@ -226,10 +239,8 @@ function create() {
     height: 100rpx;
     border-radius: 16rpx;
     background: #e0e6e1;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 48rpx;
+    overflow: hidden;
+    .ct-img { width: 100%; height: 100%; display: block; }
     &.selected { border: 4rpx solid #2e9e6b; }
   }
   .cover-upload {
@@ -241,7 +252,7 @@ function create() {
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    .u-plus { font-size: 40rpx; color: #333; }
+
     .u-label { font-size: 20rpx; color: #999; }
   }
 }

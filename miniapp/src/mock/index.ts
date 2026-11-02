@@ -55,10 +55,16 @@ export const mockTravelBooks: TravelBook[] = [
 ]
 
 export const mockSpots: MapSpot[] = [
-  { id: 's-1', bookId: 'tb-1', locationName: '色达 · 五明佛学院', province: '四川', city: '甘孜', markStatus: 'visited', visitDate: '2024-10-03', journalCount: 1 },
-  { id: 's-2', bookId: 'tb-1', locationName: '稻城 · 亚丁村', province: '四川', city: '稻城', markStatus: 'visited', visitDate: '2024-10-05', journalCount: 3 },
-  { id: 's-3', bookId: 'tb-1', locationName: '康定 · 木格措', province: '四川', city: '康定', markStatus: 'planned', journalCount: 0 },
-  { id: 's-4', bookId: 'tb-1', locationName: '成都 · 宽窄巷子', province: '四川', city: '成都', markStatus: 'visited', visitDate: '2024-10-01', journalCount: 5 }
+  { id: 's-1', bookId: 'tb-1', locationName: '色达 · 五明佛学院', province: '四川', city: '甘孜', longitude: 100.33, latitude: 32.27, markStatus: 'visited', visitDate: '2024-10-03', journalCount: 1 },
+  { id: 's-2', bookId: 'tb-1', locationName: '稻城 · 亚丁村', province: '四川', city: '稻城', longitude: 100.3, latitude: 29.03, markStatus: 'visited', visitDate: '2024-10-05', journalCount: 3 },
+  { id: 's-3', bookId: 'tb-1', locationName: '康定 · 木格措', province: '四川', city: '康定', longitude: 101.96, latitude: 30.05, markStatus: 'planned', journalCount: 0 },
+  { id: 's-4', bookId: 'tb-1', locationName: '成都 · 宽窄巷子', province: '四川', city: '成都', longitude: 104.06, latitude: 30.57, markStatus: 'visited', visitDate: '2024-10-01', journalCount: 5 },
+  { id: 's-5', bookId: 'tb-3', locationName: '大理 · 洱海', province: '云南', city: '大理', longitude: 100.18, latitude: 25.61, markStatus: 'visited', visitDate: '2024-09-22', journalCount: 2 },
+  { id: 's-6', bookId: 'tb-3', locationName: '丽江 · 古城', province: '云南', city: '丽江', longitude: 100.23, latitude: 26.86, markStatus: 'visited', visitDate: '2024-09-24', journalCount: 4 },
+  { id: 's-7', bookId: 'tb-3', locationName: '香格里拉 · 独克宗', province: '云南', city: '迪庆', longitude: 99.7, latitude: 27.83, markStatus: 'planned', journalCount: 0 },
+  { id: 's-8', bookId: 'tb-1', locationName: '拉萨 · 布达拉宫', province: '西藏', city: '拉萨', longitude: 91.14, latitude: 29.65, markStatus: 'planned', journalCount: 0 },
+  { id: 's-9', bookId: 'tb-2', locationName: '厦门 · 鼓浪屿', province: '福建', city: '厦门', longitude: 118.07, latitude: 24.45, markStatus: 'visited', visitDate: '2025-02-11', journalCount: 3 },
+  { id: 's-10', bookId: 'tb-2', locationName: '武夷山 · 九曲溪', province: '福建', city: '南平', longitude: 118.04, latitude: 27.76, markStatus: 'visited', visitDate: '2025-02-14', journalCount: 1 }
 ]
 
 export const mockJournals: Journal[] = [
@@ -94,19 +100,50 @@ export const mockJournals: Journal[] = [
   }
 ]
 
-export const mockLedger: Ledger = {
-  id: 'l-1',
-  bookId: 'tb-1',
-  name: '川西之旅账本',
-  ownerId: 'u-10086',
-  monthExpense: 8642,
-  monthIncome: 1280,
-  monthBalance: 3518,
-  todayExpense: 186.5,
-  totalExpense: 4268,
-  avgExpense: 1067,
-  billCount: 32
-}
+export const mockLedgers: Ledger[] = [
+  {
+    id: 'l-1',
+    bookId: 'tb-1',
+    name: '川西之旅账本',
+    ownerId: 'u-10086',
+    monthExpense: 8642,
+    monthIncome: 1280,
+    monthBalance: 3518,
+    todayExpense: 186.5,
+    totalExpense: 4268,
+    avgExpense: 1067,
+    billCount: 32
+  },
+  {
+    id: 'l-2',
+    bookId: 'tb-2',
+    name: '厦门慢时光账本',
+    ownerId: 'u-10086',
+    monthExpense: 3256,
+    monthIncome: 800,
+    monthBalance: 1256,
+    todayExpense: 0,
+    totalExpense: 3256,
+    avgExpense: 465,
+    billCount: 18
+  },
+  {
+    id: 'l-3',
+    bookId: 'tb-3',
+    name: '云南之南账本',
+    ownerId: 'u-10086',
+    monthExpense: 5680,
+    monthIncome: 2000,
+    monthBalance: 1680,
+    todayExpense: 320,
+    totalExpense: 5680,
+    avgExpense: 516,
+    billCount: 24
+  }
+]
+
+/** 默认账本（兼容旧引用） */
+export const mockLedger: Ledger = mockLedgers[0]
 
 export const mockBills: Bill[] = [
   { id: 'b-1', ledgerId: 'l-1', userId: 'u-10086', category: '餐饮', subCategory: '晚餐', billType: 'expense', amount: 86.0, remark: '藏式火锅', payWay: '微信支付', billDate: '2025-10-05' },
@@ -131,6 +168,16 @@ export const mockInvitation: Invitation = {
   expireAt: '2025-06-20 23:59',
   used: false
 }
+
+/** 可邀请的微信好友（新建账本时选择成员用） */
+export const mockFriends: User[] = [
+  { id: 'u-2', nickname: '周同学', signature: '', status: 'normal' },
+  { id: 'u-3', nickname: '陈小姐', signature: '', status: 'normal' },
+  { id: 'u-4', nickname: '林山', signature: '', status: 'normal' },
+  { id: 'u-5', nickname: '阿哲', signature: '', status: 'normal' },
+  { id: 'u-6', nickname: '小满', signature: '', status: 'normal' },
+  { id: 'u-7', nickname: '苏禾', signature: '', status: 'normal' }
+]
 
 // 首页"我的足迹地图"点位（汇总）
 export const mockFootprintCities = [

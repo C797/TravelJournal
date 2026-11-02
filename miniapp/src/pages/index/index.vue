@@ -1,30 +1,79 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { onShow, onLoad } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
+import ChinaMap from '@/components/ChinaMap.vue'
+import Icon from '@/components/Icon.vue'
 import { useAppStore } from '@/stores/app'
-import { mockFootprintCities, mockTravelBooks, mockJournals } from '@/mock'
+import { statusBarStyle, navRightStyle } from '@/utils/safe-area'
+import { userApi } from '@/api/auth'
+import type { MapSpot, Journal } from '@/types'
 import { formatDate } from '@/utils'
-
-function dotStyle(c: { lng: number; lat: number }) {
-  // 简化：按经纬度粗映射到地图占位区域百分比
-  const x = ((c.lng - 73) / (135 - 73)) * 88 + 4
-  const y = ((54 - c.lat) / (54 - 18)) * 78 + 8
-  return { left: `${x}%`, top: `${y}%` }
-}
 
 const appStore = useAppStore()
 
-const litCities = ref(12)
-const cities = ref(mockFootprintCities)
-const currentBook = ref(mockTravelBooks[0])
-const stories = ref(mockJournals.slice(0, 3))
+/** 我的全部标注点（跨旅行册） */
+const mySpots = ref<MapSpot[]>([])
+/** 最近游记 */
+const stories = ref<Journal[]>([])
+const loading = ref(true)
+
+/** 当前旅程：取最近创建的旅行册 */
+const currentBook = computed(() => appStore.travelBooks[0] || null)
+
+/** 地图点位：已到访绿 / 规划中橙 */
+const cities = computed(() =>
+  mySpots.value
+    .filter((s) => s.longitude != null && s.latitude != null)
+    .map((s) => ({
+      name: s.city || s.locationName,
+      status: (s.markStatus === 'visited' ? 'visited' : 'planned') as 'visited' | 'planned',
+      lng: s.longitude as number,
+      lat: s.latitude as number
+    }))
+)
+
+/** 已点亮城市数 */
+const litCities = computed(() => mySpots.value.filter((s) => s.markStatus === 'visited').length)
+
+// 封面取自设计稿导出的实拍图（static/photos）
+const COVERS = [
+  '/static/photos/story-cover.jpg',
+  '/static/photos/journal-2.jpg',
+  '/static/photos/journal-1.jpg'
+]
+function storyCover(j: Journal, i: number) {
+  // 优先用游记首图，无图时用本地占位图
+  const first = j.images && j.images.length ? j.images[0].url : ''
+  return first || COVERS[i % COVERS.length]
+}
+
+async function loadData() {
+  loading.value = true
+  try {
+    await appStore.init()
+    await appStore.ensureLogin()
+    const [spots, journals] = await Promise.all([
+      userApi.mySpots().catch(() => [] as MapSpot[]),
+      userApi.myJournals(3).catch(() => [] as Journal[])
+    ])
+    mySpots.value = spots
+    stories.value = journals
+  } finally {
+    loading.value = false
+  }
+}
 
 onLoad(() => {
-  appStore.init()
+  loadData()
 })
 
-onShow(() => {})
+onShow(() => {
+  // 从其他页返回时刷新，保证新增内容即时可见
+  if (appStore.ready) {
+    loadData()
+  }
+})
 
 function goFootprint() {
   uni.navigateTo({ url: '/pages/spots/index' })
@@ -35,6 +84,7 @@ function goAllJournals() {
 }
 
 function goBookDetail() {
+  if (!currentBook.value) return
   uni.navigateTo({ url: `/pages/travel-books/detail?id=${currentBook.value.id}` })
 }
 
@@ -64,17 +114,15 @@ function onQuickRecord() {
 
 <template>
   <view class="tj-page index-page">
-    <!-- 状态栏占位 -->
-    <view class="status-bar">
-      <text class="time">9:41</text>
-    </view>
+    <!-- 状态栏占位（高度按机型自适应） -->
+    <view class="status-bar" :style="statusBarStyle" />
 
     <!-- 标题区 -->
     <view class="header">
-      <view class="header-top">
+      <view class="header-top" :style="navRightStyle">
         <text class="title">途记</text>
         <view class="footprint-btn" @click="goFootprint">
-          <text class="loc-icon">◎</text>
+          <Icon name="locate" color="#FFFFFF" :weight="1.9" size="26rpx" />
           <text>旅行足迹</text>
         </view>
       </view>
@@ -88,37 +136,25 @@ function onQuickRecord() {
     <!-- 我的足迹地图 -->
     <view class="map-card">
       <text class="map-title">我的足迹地图</text>
-      <view class="china-map">
-        <!-- 简化中国地图轮廓 + 城市点位 -->
-        <view class="map-placeholder">
-          <text class="map-shape">中国地图</text>
-          <view
-            v-for="c in cities"
-            :key="c.name"
-            class="city-dot"
-            :class="c.status === 'visited' ? 'dot-green' : 'dot-orange'"
-            :style="dotStyle(c)"
-          >
-            <text class="city-name">{{ c.name }}</text>
-          </view>
-        </view>
-      </view>
-      <view class="map-footer">
-        <text class="lit-text">已点亮 {{ litCities }} 个城市</text>
-        <text class="view-map" @click="goFootprint">查看地图 ›</text>
-      </view>
+      <ChinaMap :cities="cities" :lit-count="litCities" />
     </view>
 
     <!-- 本次旅程 -->
     <view class="trip-card tj-card" @click="goBookDetail">
       <view class="trip-info">
         <text class="trip-label">本次旅程</text>
-        <text class="trip-name">{{ currentBook.name }}</text>
-        <text class="trip-date">{{ formatDate(currentBook.startTime) }} — {{ formatDate(currentBook.endTime) }}</text>
+        <text class="trip-name">{{ currentBook ? currentBook.name : '暂无旅程' }}</text>
+        <text class="trip-date">
+          {{
+            currentBook
+              ? formatDate(currentBook.startTime) + ' — ' + formatDate(currentBook.endTime)
+              : '点击新建你的第一本旅行册'
+          }}
+        </text>
       </view>
       <view class="trip-divider" />
       <view class="trip-count">
-        <text class="count-num">12</text>
+        <text class="count-num">{{ currentBook ? currentBook.spotCount || 0 : 0 }}</text>
         <text class="count-label">处足迹</text>
       </view>
     </view>
@@ -130,20 +166,25 @@ function onQuickRecord() {
         <text class="stories-all" @click="goAllJournals">全部游记 ›</text>
       </view>
       <view
-        v-for="j in stories"
+        v-for="(j, i) in stories"
         :key="j.id"
         class="story-card tj-card"
         @click="goJournalDetail(j.id)"
       >
         <view class="story-thumb">
-          <text class="thumb-placeholder">🏔️</text>
+          <image class="thumb-img" :src="storyCover(j, i)" mode="aspectFill" />
         </view>
         <view class="story-info">
           <text class="story-title">{{ j.title }}</text>
-          <text class="story-loc">{{ j.locationName }}</text>
+          <text class="story-loc">{{ j.locationName || '未记录地点' }}</text>
           <text class="story-excerpt">{{ j.content }}</text>
         </view>
         <text class="story-date">{{ formatDate(j.travelDate) }}</text>
+      </view>
+
+      <view v-if="!loading && !stories.length" class="story-empty">
+        <text class="se-title">还没有游记</text>
+        <text class="se-sub">记录下第一次出发吧</text>
       </view>
     </view>
 
@@ -153,17 +194,12 @@ function onQuickRecord() {
 
 <style lang="scss" scoped>
 .index-page {
-  padding: 0 32rpx 160rpx;
+  padding: 0 32rpx calc(240rpx + env(safe-area-inset-bottom));
 }
 
+/* 高度由 safe-area.ts 注入，勿写死 */
 .status-bar {
-  height: 60rpx;
-  display: flex;
-  align-items: center;
-  .time {
-    font-weight: 700;
-    font-size: 30rpx;
-  }
+  width: 100%;
 }
 
 .header {
@@ -209,65 +245,13 @@ function onQuickRecord() {
 
 .map-card {
   margin-top: 32rpx;
-  background: #ddede2;
+  background: #eaf0ea;
   border-radius: 32rpx;
   padding: 28rpx;
   .map-title {
     font-size: 30rpx;
     font-weight: 700;
-  }
-  .china-map {
-    margin-top: 16rpx;
-    .map-placeholder {
-      position: relative;
-      height: 420rpx;
-      background: #e6f0e8;
-      border-radius: 24rpx;
-      overflow: hidden;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      .map-shape {
-        color: #b8c9be;
-        font-size: 44rpx;
-        letter-spacing: 8rpx;
-      }
-      .city-dot {
-        position: absolute;
-        width: 16rpx;
-        height: 16rpx;
-        border-radius: 50%;
-        &.dot-green {
-          background: #2e9e44;
-        }
-        &.dot-orange {
-          background: #ff8a00;
-        }
-        .city-name {
-          position: absolute;
-          top: -28rpx;
-          left: 50%;
-          transform: translateX(-50%);
-          font-size: 18rpx;
-          color: #333;
-          white-space: nowrap;
-        }
-      }
-    }
-  }
-  .map-footer {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-top: 20rpx;
-    .lit-text {
-      font-weight: 700;
-      font-size: 28rpx;
-    }
-    .view-map {
-      color: #2e9e6b;
-      font-size: 26rpx;
-    }
+    color: #1a1a1a;
   }
 }
 
@@ -337,10 +321,17 @@ function onQuickRecord() {
     align-items: center;
     padding: 24rpx;
     margin-bottom: 16rpx;
+    .thumb-img {
+      width: 100%;
+      height: 100%;
+      display: block;
+      border-radius: 16rpx;
+    }
     .story-thumb {
       width: 120rpx;
       height: 120rpx;
       border-radius: 16rpx;
+      overflow: hidden;
       background: #e8f3ec;
       display: flex;
       align-items: center;
@@ -378,6 +369,22 @@ function onQuickRecord() {
       color: #999;
       align-self: flex-start;
       margin-left: 16rpx;
+    }
+  }
+
+  .story-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60rpx 0;
+    gap: 8rpx;
+    .se-title {
+      font-size: 28rpx;
+      color: #8d9a92;
+    }
+    .se-sub {
+      font-size: 22rpx;
+      color: #b6bfb8;
     }
   }
 }

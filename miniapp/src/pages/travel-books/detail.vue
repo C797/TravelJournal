@@ -1,37 +1,96 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import { onLoad } from '@dcloudio/uni-app'
+import { onLoad, onShow } from '@dcloudio/uni-app'
 import TabBar from '@/components/TabBar.vue'
-import { mockTravelBooks, mockJournals, mockBills, mockLedger } from '@/mock'
-import { formatDate } from '@/utils'
-import type { Bill } from '@/types'
+import { bookApi, journalApi } from '@/api/book'
+import { ledgerApi, billApi } from '@/api/ledger'
+import { formatDate, formatMoneyInt, formatMoney } from '@/utils'
+import Icon from '@/components/Icon.vue'
+import type { Bill, TravelBook, Journal, Ledger } from '@/types'
+import { overlayNavStyle } from '@/utils/safe-area'
 
+// 与记账页同一套分类图标
 const catMap: Record<string, { icon: string; cls: string }> = {
-  餐饮: { icon: '🍲', cls: 'food' },
-  交通: { icon: '✈️', cls: 'transport' },
-  住宿: { icon: '🏠', cls: 'hotel' },
-  门票: { icon: '🎫', cls: 'ticket' },
-  购物: { icon: '🛍️', cls: 'shop' },
-  其他: { icon: '☕', cls: 'other' }
+  餐饮: { icon: 'bowl', cls: 'food' },
+  交通: { icon: 'send', cls: 'transport' },
+  住宿: { icon: 'house', cls: 'hotel' },
+  门票: { icon: 'triangle', cls: 'ticket' },
+  购物: { icon: 'bag', cls: 'shop' },
+  其他: { icon: 'dots', cls: 'other' }
 }
 function billCatIcon(c: string) {
-  return catMap[c]?.icon || '💵'
+  return catMap[c]?.icon || 'dots'
 }
 function billCatClass(c: string) {
   return catMap[c]?.cls || 'other'
 }
 
+// 封面与缩略图取自设计稿导出（static/photos）
+const THUMBS = [
+  '/static/photos/journal-1.jpg',
+  '/static/photos/journal-2.jpg',
+  '/static/photos/journal-3.jpg',
+  '/static/photos/journal-4.jpg'
+]
+/** 游记缩略图：优先首图，无图用本地占位 */
+function thumbOf(i: number, j?: Journal) {
+  const first = j?.images && j.images.length ? j.images[0].url : ''
+  return first || THUMBS[i % THUMBS.length]
+}
+
 const activeTab = ref<'journal' | 'ledger'>('journal')
-const book = ref(mockTravelBooks[0])
-const journals = ref(mockJournals)
-const bills = ref(mockBills)
-const ledger = ref(mockLedger)
+const bookId = ref('')
+
+// 用占位对象初始化，避免模板中 book.xxx 在加载完成前报错
+const book = ref<TravelBook>({
+  id: '',
+  name: '',
+  startTime: '',
+  endTime: '',
+  bookIsPublic: false,
+  ownerId: '',
+  tripDays: 0,
+  journalCount: 0,
+  spotCount: 0
+})
+const journals = ref<Journal[]>([])
+const bills = ref<Bill[]>([])
+const ledger = ref<Ledger | null>(null)
+const loading = ref(true)
+
+const coverUrl = computed(() => book.value.coverUrl || '/static/photos/book-chuanxi.jpg')
+
+async function loadData() {
+  if (!bookId.value) return
+  loading.value = true
+  try {
+    book.value = await bookApi.detail(bookId.value)
+
+    const [journalPage, ledgerInfo] = await Promise.all([
+      journalApi.listByBook(bookId.value, 1, 50).catch(() => ({ list: [], total: 0 })),
+      ledgerApi.getByBook(bookId.value).catch(() => null)
+    ])
+    journals.value = journalPage.list
+    ledger.value = ledgerInfo
+
+    if (ledgerInfo) {
+      const billPage = await billApi.list(ledgerInfo.id, 1, 100).catch(() => ({ list: [] }))
+      bills.value = billPage.list
+    }
+  } catch {
+    // 详情加载失败时保留空态
+  } finally {
+    loading.value = false
+  }
+}
 
 onLoad((query: any) => {
-  if (query?.id) {
-    const found = mockTravelBooks.find((b) => b.id === query.id)
-    if (found) book.value = found
-  }
+  bookId.value = query?.id || ''
+  loadData()
+})
+
+onShow(() => {
+  if (bookId.value && !loading.value) loadData()
 })
 
 function goBack() {
@@ -47,7 +106,7 @@ function goSpots() {
 }
 
 function onQuick() {
-  uni.navigateTo({ url: '/pages/journals/edit' })
+  uni.navigateTo({ url: `/pages/journals/edit?bookId=${bookId.value}` })
 }
 
 // 按日期分组账单
@@ -55,13 +114,20 @@ const groupedBills = computed(() => {
   const groups: { date: string; label: string; items: Bill[] }[] = []
   const map = new Map<string, Bill[]>()
   bills.value.forEach((b) => {
-    const key = b.billDate
+    const key = String(b.billDate).slice(0, 10)
     if (!map.has(key)) map.set(key, [])
     map.get(key)!.push(b)
   })
   map.forEach((items, date) => groups.push({ date, label: formatDate(date), items }))
   return groups
 })
+
+/** 账本统计：总支出 / 人均 / 笔数 */
+const ledgerSummary = computed(() => ({
+  totalExpense: ledger.value?.totalExpense || 0,
+  avgExpense: ledger.value?.avgExpense || 0,
+  billCount: ledger.value?.billCount || 0
+}))
 </script>
 
 <template>
@@ -69,10 +135,14 @@ const groupedBills = computed(() => {
     <scroll-view scroll-y class="detail-scroll">
       <!-- 封面 -->
       <view class="cover">
-        <text class="cover-emoji">🏔️</text>
-        <view class="cover-nav">
-          <view class="cover-btn" @click="goBack"><text>‹</text></view>
-          <view class="cover-btn"><text>···</text></view>
+        <image class="cover-img" :src="coverUrl" mode="aspectFill" />
+        <view class="cover-nav" :style="overlayNavStyle">
+          <view class="cover-btn" @click="goBack">
+            <Icon name="chevron-left" color="#FFFFFF" :weight="2" size="36rpx" />
+          </view>
+          <view class="cover-btn">
+            <Icon name="dots" color="#FFFFFF" :weight="2.6" size="34rpx" />
+          </view>
         </view>
         <view class="cover-info">
           <text class="ci-tag">TRIP JOURNAL / 01</text>
@@ -84,17 +154,17 @@ const groupedBills = computed(() => {
       <!-- 统计框 -->
       <view class="stats-card tj-card">
         <view class="stat-item">
-          <text class="stat-num">12</text>
+          <text class="stat-num">{{ book.journalCount || 0 }}</text>
           <text class="stat-label">篇旅记</text>
         </view>
         <view class="stat-divider" />
         <view class="stat-item">
-          <text class="stat-num">06</text>
+          <text class="stat-num">{{ book.spotCount || 0 }}</text>
           <text class="stat-label">个地点</text>
         </view>
         <view class="stat-divider" />
         <view class="stat-item">
-          <text class="stat-num">{{ book.tripDays }}</text>
+          <text class="stat-num">{{ book.tripDays || 0 }}</text>
           <text class="stat-label">旅行天数</text>
         </view>
       </view>
@@ -108,21 +178,27 @@ const groupedBills = computed(() => {
       <!-- 旅记 Tab -->
       <view v-if="activeTab === 'journal'" class="tab-content">
         <view class="list-header">
-          <text class="lh-title">全部旅记 <text class="lh-count">12</text></text>
+          <text class="lh-title">全部旅记 <text class="lh-count">{{ journals.length }}</text></text>
           <text class="lh-action">按时间 ›</text>
         </view>
         <view
-          v-for="j in journals"
+          v-for="(j, i) in journals"
           :key="j.id"
           class="journal-card tj-card"
           @click="goJournal(j.id)"
         >
-          <view class="jc-thumb"><text>🏔️</text></view>
+          <view class="jc-thumb">
+            <image class="jc-img" :src="thumbOf(i, j)" mode="aspectFill" />
+          </view>
           <view class="jc-info">
             <text class="jc-title">{{ j.title }}</text>
-            <text class="jc-meta">{{ formatDate(j.travelDate) }} · {{ j.locationName }}</text>
+            <text class="jc-meta">{{ formatDate(j.travelDate) }} · {{ j.locationName || '未记录地点' }}</text>
             <text class="jc-excerpt">{{ j.content }}</text>
           </view>
+        </view>
+
+        <view v-if="!loading && !journals.length" class="tab-empty">
+          <text>还没有旅记，点右下角开始记录</text>
         </view>
       </view>
 
@@ -130,30 +206,32 @@ const groupedBills = computed(() => {
       <view v-else class="tab-content">
         <view class="ledger-stats tj-card">
           <view class="ls-item">
-            <text class="ls-num">¥4,268</text>
+            <text class="ls-num">{{ formatMoneyInt(ledgerSummary.totalExpense) }}</text>
             <text class="ls-label">总支出</text>
           </view>
           <view class="ls-divider" />
           <view class="ls-item">
-            <text class="ls-num">¥1,067</text>
+            <text class="ls-num">{{ formatMoneyInt(ledgerSummary.avgExpense) }}</text>
             <text class="ls-label">人均花费</text>
           </view>
           <view class="ls-divider" />
           <view class="ls-item">
-            <text class="ls-num">32</text>
+            <text class="ls-num">{{ ledgerSummary.billCount }}</text>
             <text class="ls-label">记账笔数</text>
           </view>
         </view>
 
         <view class="list-header">
-          <text class="lh-title">账单明细 <text class="lh-count green">32</text></text>
+          <text class="lh-title">账单明细 <text class="lh-count green">{{ ledgerSummary.billCount }}</text></text>
           <text class="lh-action">按日期 ›</text>
         </view>
 
         <view v-for="g in groupedBills" :key="g.date" class="bill-group">
           <text class="bg-date">{{ g.label }}</text>
           <view v-for="b in g.items" :key="b.id" class="bill-card tj-card">
-            <view class="bc-icon" :class="'cat-' + billCatClass(b.category)"><text>{{ billCatIcon(b.category) }}</text></view>
+            <view class="bc-icon" :class="'cat-' + billCatClass(b.category)">
+              <Icon :name="billCatIcon(b.category)" size="32rpx" :weight="1.6" :color="'#2E9E6B'" />
+            </view>
             <view class="bc-info">
               <text class="bc-title">{{ b.category }} · {{ b.subCategory }}</text>
               <text class="bc-remark">{{ b.remark }}</text>
@@ -174,17 +252,26 @@ const groupedBills = computed(() => {
 .detail-page { min-height: 100vh; background: #f5f6f5; }
 .detail-scroll { height: 100vh; }
 
+.tab-empty {
+  padding: 60rpx 0;
+  display: flex;
+  justify-content: center;
+  font-size: 24rpx;
+  color: #a9b5ac;
+}
+
 .cover {
   position: relative;
   height: 560rpx;
-  background: linear-gradient(160deg, #8aa89a, #3e6a54);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  .cover-emoji { font-size: 140rpx; }
+  background: #cdd9d2;
+  .cover-img {
+    width: 100%;
+    height: 100%;
+    display: block;
+  }
   .cover-nav {
     position: absolute;
-    top: 60rpx;
+    top: 0;
     left: 0;
     right: 0;
     padding: 0 32rpx;
@@ -194,12 +281,10 @@ const groupedBills = computed(() => {
       width: 72rpx;
       height: 72rpx;
       border-radius: 50%;
-      background: rgba(255,255,255,0.3);
-      color: #fff;
+      background: rgba(255, 255, 255, 0.26);
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 40rpx;
     }
   }
   .cover-info {
@@ -278,13 +363,11 @@ const groupedBills = computed(() => {
     width: 140rpx;
     height: 140rpx;
     border-radius: 16rpx;
+    overflow: hidden;
     background: #e8f3ec;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 56rpx;
     flex-shrink: 0;
   }
+  .jc-img { width: 100%; height: 100%; display: block; }
   .jc-info {
     flex: 1;
     margin-left: 24rpx;
@@ -331,12 +414,12 @@ const groupedBills = computed(() => {
     justify-content: center;
     font-size: 36rpx;
     flex-shrink: 0;
-    &.cat-food { background: #fff3e0; }
-    &.cat-transport { background: #e3f0ff; }
-    &.cat-hotel { background: #fde8ee; }
-    &.cat-ticket { background: #fff8e0; }
-    &.cat-shop { background: #e8f3ec; }
-    &.cat-other { background: #efe9ff; }
+    &.cat-food { background: #fbeee0; }
+    &.cat-transport { background: #eaf1ff; }
+    &.cat-hotel { background: #fcecf4; }
+    &.cat-ticket { background: #f0ebfb; }
+    &.cat-shop { background: #ecf4ee; }
+    &.cat-other { background: #f0f3f0; }
   }
   .bc-info {
     flex: 1;

@@ -11,17 +11,19 @@ onLaunch(() => {
 page {
   --tj-green: #2E9E6B;
   --tj-green-dark: #1E7A50;
-  --tj-green-light: #E8F3EC;
-  --tj-orange: #FF8A00;
-  --tj-bg: #F2F4F1;
-  --tj-text: #1A1A1A;
-  --tj-text-secondary: #999999;
-  --tj-text-tertiary: #B0B0B0;
+  --tj-green-light: #EAF3EC;
+  --tj-orange: #D98C3F;
+  --tj-bg: #F5F7F5;
+  --tj-text: #1A2E2A;
+  --tj-text-secondary: #6B756F;
+  --tj-text-tertiary: #9AA39D;
+  --tj-line: #E7EEE9;
+  --tj-line-light: #F0F3F1;
   --tj-card: #FFFFFF;
-  --tj-ink: #1E3A2F;
+  --tj-ink: #234B3A;
 
-  background-color: #F2F4F1;
-  color: #1A1A1A;
+  background-color: #F5F7F5;
+  color: #1A2E2A;
   font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Helvetica Neue', 'Microsoft YaHei', sans-serif;
   font-size: 28rpx;
   line-height: 1.6;
@@ -116,13 +118,15 @@ view, text, image, scroll-view, input, textarea, button {
   .tj-nav-back {
     position: absolute;
     left: 24rpx;
-    width: 64rpx;
+    width: auto;
+    min-width: 64rpx;
     height: 64rpx;
     display: flex;
     align-items: center;
     justify-content: center;
     font-size: 44rpx;
     color: #1A1A1A;
+    white-space: nowrap;
   }
   .tj-nav-action {
     position: absolute;
